@@ -1,134 +1,163 @@
-// Create the 'basemap' tile layer that will be the background of our map.
-let basemap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-});
+// Wait for DOM to be fully loaded before executing
+document.addEventListener('DOMContentLoaded', function() {
+  // Initialize base maps
+  const baseMaps = {
+      // Standard street view
+      "Street Map": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }),
 
-// OPTIONAL: Step 2
-// Create the 'street' tile layer as a second background of the map
-let street = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> contributors'
-});
+      // Topographic view showing terrain
+      "Topographic Map": L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+          attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }),
 
-// Create the map object with center and zoom options.
-let map = L.map('mapid', {
-  center: [37.7749, -122.4194],
-  zoom: 5,
-  layers: [basemap]
-});
+      // NASA's night light data view
+      "Night View": L.tileLayer('https://map1.vis.earthdata.nasa.gov/wmts-webmerc/VIIRS_CityLights_2012/default/{time}/{tilematrixset}{maxZoom}/{z}/{y}/{x}.{format}', {
+          attribution: 'NASA Earth Observatory',
+          bounds: [[-85.0511287776, -179.999999975], [85.0511287776, 179.999999975]],
+          minZoom: 1,
+          maxZoom: 8,
+          format: 'jpg',
+          time: '',
+          tilematrixset: 'GoogleMapsCompatible_Level'
+      }),
 
-// Then add the 'basemap' tile layer to the map.
+      // Satellite imagery view
+      "Satellite": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP'
+      })
+  };
 
-// OPTIONAL: Step 2
-// Create the layer groups, base maps, and overlays for our two sets of data, earthquakes and tectonic_plates.
-// Add a control to the map that will allow the user to change which layers are visible.
-let baseMaps = {
-  "Basemap": basemap,
-  "Street": street
-};
+  // Initialize the map with default settings
+  let map = L.map("map", {
+      center: [40.7, -94.5], // Centers on US
+      zoom: 3,               // Initial zoom level
+      layers: [baseMaps["Street Map"]] // Default base map
+  });
 
-let earthquakes = new L.LayerGroup();
-let tectonic_plates = new L.LayerGroup();
+  // Create layer groups for toggleable data
+  let earthquakes = new L.LayerGroup();
+  let tectonicPlates = new L.LayerGroup();
 
-let overlays = {
-  "Earthquakes": earthquakes,
-  "Tectonic Plates": tectonic_plates
-};
+  // Define overlay maps for layer control
+  const overlayMaps = {
+      "Earthquakes": earthquakes,
+      "Tectonic Plates": tectonicPlates
+  };
 
-// Add a control to the map that will allow the user to change which layers are visible.
-L.control.layers(baseMaps, overlays).addTo(map);
-
-// Make a request that retrieves the earthquake geoJSON data.
-d3.json("https://earthquake.usgs.gov/earthquakes/feed/v1.0/csv.php").then(function (data) {
-
-  // This function returns the style data for each of the earthquakes we plot on
-  // the map. Pass the magnitude and depth of the earthquake into two separate functions
-  // to calculate the color and radius.
-  function styleInfo(feature) {
-    return {
-      opacity: 1,
-      fillOpacity: 1,
-      fillColor: getColor(feature.geometry.coordinates[2]),
-      color: "#000000",
-      radius: getRadius(feature.properties.mag),
-      stroke: true,
-      weight: 0.5
-    };
-  }
-
-
-  // This function determines the color of the marker based on the depth of the earthquake.
-  function getColor(depth) {
-    if (depth > 90) return "#ea2c2c";
-    if (depth > 70) return "#ea822c";
-    if (depth > 50) return "#ee9c00";
-    if (depth > 30) return "#eecc00";
-    if (depth > 10) return "#d4ee00";
-    return "#98ee00";
-  }
-
-
-  // This function determines the radius of the earthquake marker based on its magnitude.
-  function getRadius(magnitude) {
-    if (magnitude === 0) return 1;
-    return magnitude * 4;
-
-  }
-
-  // Add a GeoJSON layer to the map once the file is loaded.
-  L.geoJson(data, {
-    // Turn each feature into a circleMarker on the map.
-    pointToLayer: function (feature, latlng) {
-      return L.circleMarker(latlng);
-    },
-    // Set the style for each circleMarker using our styleInfo function.
-    style: styleInfo,
-    // Create a popup for each marker to display the magnitude and location of the earthquake after the marker has been created and styled
-    onEachFeature: function (feature, layer) {
-      layer.bindPopup("Magnitude: " + feature.properties.mag + "<br>Location: " + feature.properties.place);
-    }
-    
-  // OPTIONAL: Step 2
-  // Add the data to the earthquake layer instead of directly to the map.
+  // Add layer control to toggle different maps and data
+  L.control.layers(baseMaps, overlayMaps, {
+      collapsed: false // Keep control expanded
   }).addTo(map);
 
-  // Create a legend control object.
-  let legend = L.control({
-    position: "bottomright"
-  });
+  // Style function for earthquake markers
+  function styleInfo(feature) {
+      return {
+          opacity: 1,
+          fillOpacity: 1,
+          fillColor: getColor(feature.geometry.coordinates[2]), // Color based on depth
+          color: "#000000",
+          radius: getRadius(feature.properties.mag), // Size based on magnitude
+          stroke: true,
+          weight: 0.5
+      };
+  }
 
-  // Then add all the details for the legend
-  legend.onAdd = function () {
-    let div = L.DomUtil.create("div", "info legend");
-    const depths = [-10, 10, 30, 50, 70, 90];
-    const colors = ["#98ee00", "#d4ee00", "#eecc00", "#ee9c00", "#ea822c", "#ea2c2c"];
+  // Determine marker color based on earthquake depth
+  function getColor(depth) {
+      // Returns increasingly darker colors for deeper earthquakes
+      switch (true) {
+          case depth > 90: return "#ea2c2c"; // Deep red for deepest
+          case depth > 70: return "#ea822c"; // Orange-red
+          case depth > 50: return "#ee9c00"; // Orange
+          case depth > 30: return "#eecc00"; // Yellow-orange
+          case depth > 10: return "#d4ee00"; // Light yellow-green
+          default: return "#98ee00";         // Light green for shallowest
+      }
+  }
 
-    // Initialize depth intervals and colors for the legend
-    const depths = [-10, 10, 30, 50, 70, 90];
-const colors = ["#98ee00", "#d4ee00", "#eecc00", "#ee9c00", "#ea822c", "#ea2c2c"];   
+  // Calculate marker size based on earthquake magnitude
+  function getRadius(magnitude) {
+      return magnitude === 0 ? 1 : magnitude * 4;
+  }
 
-    // Loop through our depth intervals to generate a label with a colored square for each interval.
-    for (let i = 0; i < depths.length; i++) {
-      div.innerHTML +=
-        "<i style='background: " + colors[i] + "'></i> " +
-        depths[i] + (depths[i + 1] ? "&ndash;" + depths[i + 1] + "<br>" : "+");
-    }
-    return div;
-  };   
+  // Format date for popup
+  function formatDate(timestamp) {
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+  }
 
+  // Create popup content
+  function createPopupContent(feature) {
+      return `
+          <h3>Location: ${feature.properties.place}</h3>
+          <hr>
+          <p>Magnitude: ${feature.properties.mag}</p>
+          <p>Depth: ${feature.geometry.coordinates[2]} km</p>
+          <p>Time: ${formatDate(feature.properties.time)}</p>
+      `;
+  }
 
-  // Finally, add the legend to the map.
-  legend.addTo(map);
+  // Create and add the legend
+  function createLegend() {
+      let legend = L.control({ position: "bottomright" });
 
-  // OPTIONAL: Step 2
-  // Make a request to get our Tectonic Plate geoJSON data.
-  d3.json("https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json").then(function (plate_data) {
-    // Save the geoJSON data, along with style information, to the tectonic_plates layer.
-    L.geoJson(plate_data, {
-      color: "#ff6500",
-      weight: 2
-    }).addTo(tectonic_plates);
+      legend.onAdd = function() {
+          let div = L.DomUtil.create("div", "info legend");
+          let grades = [-10, 10, 30, 50, 70, 90];
+          let colors = [
+              "#98ee00", "#d4ee00", "#eecc00",
+              "#ee9c00", "#ea822c", "#ea2c2c"
+          ];
 
-    // Then add the tectonic_plates layer to the map.
-    tectonic_plates.addTo(map);   
-  });
+          div.innerHTML = "<h4>Depth (km)</h4>";
+
+          // Generate legend labels
+          for (let i = 0; i < grades.length; i++) {
+              div.innerHTML +=
+                  '<i style="background: ' + colors[i] + '"></i> ' +
+                  grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
+          }
+
+          return div;
+      };
+
+      return legend;
+  }
+
+  // Fetch and process earthquake data
+  d3.json("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson")
+      .then(function(data) {
+          // Add earthquake data to map
+          L.geoJson(data, {
+              pointToLayer: function(feature, latlng) {
+                  return L.circleMarker(latlng);
+              },
+              style: styleInfo,
+              onEachFeature: function(feature, layer) {
+                  layer.bindPopup(createPopupContent(feature));
+              }
+          }).addTo(earthquakes);
+
+          earthquakes.addTo(map);
+          createLegend().addTo(map);
+      })
+      .catch(function(error) {
+          console.error("Error fetching earthquake data:", error);
+      });
+
+  // Fetch and add tectonic plates data
+  d3.json("https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json")
+      .then(function(plateData) {
+          L.geoJson(plateData, {
+              color: "#ff6500",
+              weight: 2
+          }).addTo(tectonicPlates);
+
+          tectonicPlates.addTo(map);
+      })
+      .catch(function(error) {
+          console.error("Error fetching tectonic plates data:", error);
+      });
 });
